@@ -4,18 +4,51 @@ A Spring Boot 3.x Starter that provides auto-configuration for Snowflake ID gene
 
 ## Installation
 
+### Step 1: Build and Install Locally
+
+Since this is a SNAPSHOT version, you need to install it to your local Maven repository first:
+```bash
+git clone <repository-url>
+cd common-spring-boot-starter
+./gradlew clean publishToMavenLocal
+```
+
+### Step 2: Configure Repository
+
+Add `mavenLocal()` to your project's repository configuration.
+
+**Option A: settings.gradle (Recommended)**
+```gradle
+dependencyResolutionManagement {
+    repositories {
+        mavenLocal()  // Required for local SNAPSHOT
+        mavenCentral()
+    }
+}
+```
+
+**Option B: build.gradle**
+```gradle
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+```
+
+### Step 3: Add Dependency
 ```gradle
 dependencies {
     implementation 'com.kazama:common-spring-boot-starter:1.0.0-SNAPSHOT'
 }
 ```
 
+> **Note:** All team members must run `./gradlew publishToMavenLocal` in the starter project before using it.
+
 ## Usage
 
 ### 1. Snowflake ID Generator
 
 #### Configuration (application.yml)
-
 ```yaml
 common:
   snowflake:
@@ -26,7 +59,6 @@ common:
 Alternatively, use environment variables: `WORKER_ID`, `DATACENTER_ID`
 
 #### Auto-generate ID for JPA Entities
-
 ```java
 import jakarta.persistence.*;
 import org.kazama.snowflake.SnowflakeId;
@@ -42,7 +74,6 @@ public class User {
 ```
 
 #### Manual ID Generation
-
 ```java
 @Autowired
 private SnowflakeGenerator snowflakeGenerator;
@@ -55,7 +86,6 @@ public void createOrder() {
 ### 2. Redisson Redis Client
 
 #### Configuration (application.yml)
-
 ```yaml
 common:
   redisson:
@@ -67,7 +97,6 @@ common:
 ```
 
 #### Usage Examples
-
 ```java
 @Autowired
 private RedissonClient redissonClient;
@@ -119,7 +148,6 @@ public void rateLimiter() {
 ```
 
 ## Complete Example
-
 ```java
 @Entity
 class Product {
@@ -159,3 +187,32 @@ class ProductService {
 
 - Java 21+
 - Spring Boot 3.5.10+
+
+## Troubleshooting
+
+### "Could not find com.kazama:common-spring-boot-starter:1.0.0-SNAPSHOT"
+
+**Cause:** The starter is not installed in your local Maven repository.
+
+**Solution:**
+```bash
+cd common-spring-boot-starter
+./gradlew publishToMavenLocal
+```
+
+Verify installation:
+```bash
+ls ~/.m2/repository/com/kazama/common-spring-boot-starter/1.0.0-SNAPSHOT/
+```
+
+### Changes Not Reflecting After Update
+
+SNAPSHOT versions are cached by Gradle. Force refresh:
+```bash
+./gradlew clean build --refresh-dependencies
+```
+
+Or delete Gradle cache:
+```bash
+rm -rf ~/.gradle/caches/modules-2/files-2.1/com.kazama/
+```
