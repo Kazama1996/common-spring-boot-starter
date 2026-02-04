@@ -1,6 +1,6 @@
 # Common Spring Boot Starter
 
-A Spring Boot 3.x Starter that provides auto-configuration for Snowflake ID generator and Redisson Redis client.
+A Spring Boot 3.x Starter that provides auto-configuration for Snowflake ID generator.
 
 ## Installation
 
@@ -46,7 +46,9 @@ dependencies {
 
 ## Usage
 
-### 1. Snowflake ID Generator
+### Snowflake ID Generator
+
+The Snowflake ID generator provides distributed unique ID generation with timestamp, datacenter, and worker machine information encoded in a 64-bit Long value.
 
 #### Configuration (application.yml)
 ```yaml
@@ -56,12 +58,16 @@ common:
     datacenter-id: 1    # Optional, defaults to 1
 ```
 
-Alternatively, use environment variables: `WORKER_ID`, `DATACENTER_ID`
+Alternatively, use environment variables:
+```properties
+WORKER_ID=1
+DATACENTER_ID=1
+```
 
 #### Auto-generate ID for JPA Entities
 ```java
 import jakarta.persistence.*;
-import org.kazama.snowflake.SnowflakeId;
+import com.kazama.common.snowflake.SnowflakeId;
 
 @Entity
 public class User {
@@ -70,123 +76,108 @@ public class User {
     private Long id;
 
     private String username;
+    private String email;
+    
+    // getters and setters...
 }
 ```
 
 #### Manual ID Generation
 ```java
-@Autowired
-private SnowflakeGenerator snowflakeGenerator;
+import com.kazama.common.snowflake.SnowflakeGenerator;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
 
-public void createOrder() {
-    long id = snowflakeGenerator.nextId();
-}
-```
+@Service
+public class OrderService {
+    
+    @Autowired
+    private SnowflakeGenerator snowflakeGenerator;
 
-### 2. Redisson Redis Client
-
-#### Configuration (application.yml)
-```yaml
-common:
-  redisson:
-    address: redis://127.0.0.1:6379
-    password: your_password      # Optional
-    database: 0
-    connection-pool-size: 64
-    connection-minimum-idle-size: 10
-```
-
-#### Usage Examples
-```java
-@Autowired
-private RedissonClient redissonClient;
-
-// Cache operations
-public void cache() {
-    RBucket<String> bucket = redissonClient.getBucket("key");
-    bucket.set("value", 1, TimeUnit.HOURS);
-    String value = bucket.get();
-}
-
-// Distributed lock
-public void lock() {
-    RLock lock = redissonClient.getLock("myLock");
-    try {
-        if (lock.tryLock(10, 30, TimeUnit.SECONDS)) {
-            try {
-                // Business logic
-            } finally {
-                lock.unlock();
-            }
-        }
-    } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-    }
-}
-
-// Map/List/Set
-public void collections() {
-    RMap<String, String> map = redissonClient.getMap("myMap");
-    map.put("key", "value");
-
-    RList<String> list = redissonClient.getList("myList");
-    list.add("item");
-
-    RSet<String> set = redissonClient.getSet("mySet");
-    set.add("element");
-}
-
-// Rate limiter
-public void rateLimiter() {
-    RRateLimiter limiter = redissonClient.getRateLimiter("myLimiter");
-    limiter.trySetRate(RateType.OVERALL, 10, 5, RateIntervalUnit.SECONDS);
-
-    if (limiter.tryAcquire()) {
-        // Allow request
+    public void createOrder() {
+        long orderId = snowflakeGenerator.nextId();
+        System.out.println("Generated Order ID: " + orderId);
+        // Use the ID for your business logic
     }
 }
 ```
 
 ## Complete Example
 ```java
+import jakarta.persistence.*;
+import com.kazama.common.snowflake.SnowflakeId;
+
 @Entity
-class Product {
+@Table(name = "products")
+public class Product {
     @Id
     @SnowflakeId
     private Long id;
+    
+    @Column(nullable = false)
     private String name;
+    
+    @Column(nullable = false)
     private Double price;
+    
+    @Column(name = "created_at")
+    private LocalDateTime createdAt;
+    
+    // getters and setters...
+}
+
+@Repository
+public interface ProductRepository extends JpaRepository<Product, Long> {
 }
 
 @Service
-class ProductService {
+public class ProductService {
     @Autowired
     private ProductRepository repository;
-
+    
     @Autowired
-    private RedissonClient redissonClient;
+    private SnowflakeGenerator snowflakeGenerator;
 
-    public Product getWithCache(Long id) {
-        String key = "product:" + id;
-
-        // Try to get from cache
-        Product cached = redissonClient.<Product>getBucket(key).get();
-        if (cached != null) return cached;
-
-        // Query from database and cache
-        Product product = repository.findById(id).orElse(null);
-        if (product != null) {
-            redissonClient.getBucket(key).set(product);
-        }
-        return product;
+    public Product createProduct(String name, Double price) {
+        Product product = new Product();
+        product.setName(name);
+        product.setPrice(price);
+        product.setCreatedAt(LocalDateTime.now());
+        
+        // ID will be auto-generated via @SnowflakeId annotation
+        return repository.save(product);
+    }
+    
+    public Long generateCustomId() {
+        // Manual ID generation when needed
+        return snowflakeGenerator.nextId();
     }
 }
 ```
+
+## How Snowflake ID Works
+
+Snowflake ID is a 64-bit distributed ID generation algorithm:
+```
+| 1 bit (unused) | 41 bits (timestamp) | 5 bits (datacenter) | 5 bits (worker) | 12 bits (sequence) |
+```
+
+- **Timestamp (41 bits)**: Milliseconds since custom epoch
+- **Datacenter ID (5 bits)**: Supports up to 32 datacenters
+- **Worker ID (5 bits)**: Supports up to 32 workers per datacenter
+- **Sequence (12 bits)**: 4096 IDs per millisecond per worker
+
+**Benefits:**
+- ✅ Globally unique across distributed systems
+- ✅ Roughly time-ordered (sortable)
+- ✅ No database coordination required
+- ✅ High performance (millions of IDs/second)
 
 ## Requirements
 
 - Java 21+
 - Spring Boot 3.5.10+
+- Spring Data JPA (for `@SnowflakeId` annotation)
 
 ## Troubleshooting
 
@@ -216,3 +207,29 @@ Or delete Gradle cache:
 ```bash
 rm -rf ~/.gradle/caches/modules-2/files-2.1/com.kazama/
 ```
+
+### Worker ID Conflicts in Development
+
+If running multiple instances locally, manually assign unique worker IDs:
+```yaml
+# Instance 1
+common:
+  snowflake:
+    worker-id: 1
+
+# Instance 2
+common:
+  snowflake:
+    worker-id: 2
+```
+
+## Roadmap
+
+- [ ] Redisson Redis client auto-configuration
+- [ ] Distributed tracing support
+- [ ] More ID generation strategies (UUID, ULID)
+- [ ] Monitoring and metrics integration
+
+## License
+
+MIT License
