@@ -1,6 +1,6 @@
 # Common Spring Boot Starter
 
-A Spring Boot 3.x Starter that provides auto-configuration for Snowflake ID generator.
+A Spring Boot 3.x Starter that provides auto-configuration for Snowflake ID generator and Redisson Redis client.
 
 ## Installation
 
@@ -90,7 +90,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class OrderService {
-    
+
     @Autowired
     private SnowflakeGenerator snowflakeGenerator;
 
@@ -98,6 +98,76 @@ public class OrderService {
         long orderId = snowflakeGenerator.nextId();
         System.out.println("Generated Order ID: " + orderId);
         // Use the ID for your business logic
+    }
+}
+```
+
+### Redisson Redis Client
+
+The starter provides auto-configured `RedissonClient` for distributed locks, caches, and other Redis operations.
+
+#### Configuration (application.yml)
+```yaml
+common:
+  redis:
+    address: redis://localhost:6379    # Redis server address
+    password: null                      # Optional password
+    database: 0                         # Database index
+    connection-pool-size: 64            # Connection pool size
+    connection-minimum-idle-size: 24    # Minimum idle connections
+```
+
+#### Basic Usage
+```java
+import org.redisson.api.RedissonClient;
+import org.redisson.api.RLock;
+import org.redisson.api.RBucket;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class CacheService {
+
+    @Autowired
+    private RedissonClient redissonClient;
+
+    // Distributed Lock
+    public void executeWithLock(String lockName, Runnable task) {
+        RLock lock = redissonClient.getLock(lockName);
+        lock.lock();
+        try {
+            task.run();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Simple Key-Value Cache
+    public void cacheValue(String key, String value) {
+        RBucket<String> bucket = redissonClient.getBucket(key);
+        bucket.set(value);
+    }
+
+    public String getCachedValue(String key) {
+        RBucket<String> bucket = redissonClient.getBucket(key);
+        return bucket.get();
+    }
+}
+```
+
+#### Custom RedissonClient
+To override the auto-configured client, define your own bean:
+```java
+@Configuration
+public class CustomRedisConfig {
+
+    @Bean
+    public RedissonClient redissonClient() {
+        Config config = new Config();
+        // Custom configuration (e.g., cluster mode)
+        config.useClusterServers()
+            .addNodeAddress("redis://node1:6379", "redis://node2:6379");
+        return Redisson.create(config);
     }
 }
 ```
@@ -225,7 +295,7 @@ common:
 
 ## Roadmap
 
-- [ ] Redisson Redis client auto-configuration
+- [x] Redisson Redis client auto-configuration
 - [ ] Distributed tracing support
 - [ ] More ID generation strategies (UUID, ULID)
 - [ ] Monitoring and metrics integration

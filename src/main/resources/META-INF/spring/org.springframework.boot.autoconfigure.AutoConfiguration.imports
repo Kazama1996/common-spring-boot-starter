@@ -1,1 +1,2 @@
 com.kazama.common.snowflake.SnowflakeAutoConfiguration
+com.kazama.common.redis.RedissonAutoConfiguration
